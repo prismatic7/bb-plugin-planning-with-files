@@ -143,19 +143,8 @@ export default async function plugin(bb: BbPluginApi) {
     planRoot = next.planRoot;
   });
 
-  async function projectDir(projectId: string): Promise<string> {
-    try {
-      const project = await bb.sdk.projects.get({ projectId });
-      const source = (project as any)?.sources?.find((s: any) => s.type === "local_path");
-      if (source?.path) return source.path;
-    } catch {
-      // fall through
-    }
-    return process.cwd();
-  }
-
-  async function activePlanDir(projectId: string): Promise<string | null> {
-    const root = join(await projectDir(projectId), planRoot);
+  async function activePlanDir(threadId: string, projectId: string): Promise<string | null> {
+    const root = join(await threadCwd(bb, threadId, projectId), planRoot);
     if (!existsSync(root)) return null;
     const dirs = (await readdir(root, { withFileTypes: true }))
       .filter((d) => d.isDirectory())
@@ -183,8 +172,8 @@ export default async function plugin(bb: BbPluginApi) {
       goal: z.string().min(3).max(200).describe("One sentence: what finished looks like."),
       phases: z.array(z.string().min(1).max(300)).min(1).max(20).describe("Ordered phases, each with an observable completion."),
     }),
-    async execute({ goal, phases }, { projectId }) {
-      const base = await projectDir(projectId);
+    async execute({ goal, phases }, { threadId, projectId }) {
+      const base = await threadCwd(bb, threadId, projectId);
       const dir = join(base, planRoot, planDirName(goal));
       await mkdir(dir, { recursive: true });
       const now = new Date();
@@ -206,8 +195,8 @@ export default async function plugin(bb: BbPluginApi) {
       "Read the active plan: goal, every phase with its state, and the tail of progress.md. Call it at the start " +
       "of a session, after a compaction, or whenever you need to know where the work actually stands.",
     parameters: z.object({}),
-    async execute(_args, { projectId }) {
-      const dir = await activePlanDir(projectId);
+    async execute(_args, { threadId, projectId }) {
+      const dir = await activePlanDir(threadId, projectId);
       if (!dir) return "pwf_status: no plan found. Start one with pwf_init.";
       const plan = parsePlan(await readFile(join(dir, PLAN_TASK), "utf8"));
       const progress = existsSync(join(dir, PLAN_PROGRESS)) ? await readFile(join(dir, PLAN_PROGRESS), "utf8") : "";
@@ -226,8 +215,8 @@ export default async function plugin(bb: BbPluginApi) {
       tick: z.number().int().min(1).optional().describe("Phase number to mark complete before checking."),
       note: z.string().max(500).optional().describe("What was done, appended to progress.md when ticking."),
     }),
-    async execute({ tick, note }, { projectId }) {
-      const dir = await activePlanDir(projectId);
+    async execute({ tick, note }, { threadId, projectId }) {
+      const dir = await activePlanDir(threadId, projectId);
       if (!dir) return "pwf_check: no plan found. Start one with pwf_init.";
       const taskPath = join(dir, PLAN_TASK);
       let markdown = await readFile(taskPath, "utf8");
@@ -263,4 +252,33 @@ export default async function plugin(bb: BbPluginApi) {
   bb.onDispose(() => {
     bb.log.info("bb-plugin-planning-with-files disposed");
   });
+}
+/** The directory this thread actually works in: its environment's path, not
+ *  the project root. A worktree or an attached workspace is a different
+ *  directory from the project, and resolving paths against the project puts
+ *  files in the wrong tree. */
+export async function threadCwd(bb: BbPluginApi, threadId: string, projectId: string): Promise<string> {
+  const asPath = (v: any): string | null =>
+    v && typeof v === "object" && typeof v.path === "string" && v.path.trim() ? v.path : null;
+  try {
+    const t: any = await bb.sdk.threads.get({ threadId } as any);
+    const thread = t?.thread ?? t;
+    const envId = thread?.environmentId;
+    if (envId) {
+      const e: any = await bb.sdk.environments.get({ environmentId: envId } as any);
+      const p = asPath(e?.environment ?? e);
+      if (p) return p;
+    }
+  } catch {
+    // fall through to the project
+  }
+  try {
+    const p: any = await bb.sdk.projects.get({ projectId } as any);
+    const sources = (p?.project ?? p)?.sources ?? [];
+    const src = Array.isArray(sources) ? sources.find((s: any) => s.type === "local_path") : null;
+    if (src?.path) return src.path;
+  } catch {
+    // fall through to the server cwd
+  }
+  return process.cwd();
 }
