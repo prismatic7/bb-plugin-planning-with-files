@@ -1,0 +1,13 @@
+bb-plugin-planning-with-files
+=============================
+
+The three-file plan format (task_plan.md, findings.md, progress.md) and the
+tool vocabulary (pwf_init / pwf_status / pwf_check) follow
+OthmanAdi/planning-with-files and its OpenCode port, both MIT.
+
+No upstream code is copied: those implementations are OpenCode plugins built
+on hook surfaces (per-turn context injection, post-write reminders, compaction
+flush, session-idle gate) that BB does not expose. This port keeps the file
+discipline and the completion gate, and states plainly what it cannot do.
+
+Everything in this repository is MIT, original work by prismatic7.
