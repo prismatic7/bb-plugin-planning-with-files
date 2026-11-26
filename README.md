@@ -19,11 +19,14 @@ Three files under `.planning/<date>-<slug>/`:
   box is empty and names what is open; `tick` marks a phase complete and logs
   the note to progress.md.
 
-## Skill
+## The skill lives elsewhere
 
-`skills/planning-with-files/SKILL.md` carries the discipline: phases with
+This plugin ships the **tools** and no skill. The discipline — phases with
 observable completion, findings as evidence, ticks only when the evidence
-exists.
+exists — is carried by the user-level `planning-with-files` skill at
+`~/.agents/skills/planning-with-files/`, installed from upstream and already in
+`bb skill list`. Bundling a second copy gave BB two skills with one name, so the
+plugin defers to that one; the tool descriptions say when to call them.
 
 ## What is not ported
 
