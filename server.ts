@@ -15,7 +15,7 @@
 import { type BbPluginApi } from "@get-bb/plugin-sdk";
 import { z } from "zod";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile, appendFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, stat, writeFile, appendFile } from "node:fs/promises";
 import { isAbsolute, join, resolve } from "node:path";
 
 export const PLAN_TASK = "task_plan.md";
@@ -125,6 +125,14 @@ export function renderStatus(plan: Plan, progressTail: string, findingsPresent: 
   ].join("\n");
 }
 
+/** The active plan is the most recently written one. Directory names sort by
+ *  their slug, not by recency — "fourth" sorts before "third" — so a name sort
+ *  picks the wrong plan the moment two share a date. */
+export function newestPlan(entries: Array<{ name: string; mtimeMs: number }>): string | null {
+  if (!entries.length) return null;
+  return [...entries].sort((a, b) => b.mtimeMs - a.mtimeMs || b.name.localeCompare(a.name))[0].name;
+}
+
 // ─── Plugin ───────────────────────────────────────────────────────────
 
 export default async function plugin(bb: BbPluginApi) {
@@ -146,16 +154,16 @@ export default async function plugin(bb: BbPluginApi) {
   async function activePlanDir(threadId: string, projectId: string): Promise<string | null> {
     const root = join(await threadCwd(bb, threadId, projectId), planRoot);
     if (!existsSync(root)) return null;
-    const dirs = (await readdir(root, { withFileTypes: true }))
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .sort()
-      .reverse();
+    const dirs = (await readdir(root, { withFileTypes: true })).filter((d) => d.isDirectory());
+    const withMtime: Array<{ name: string; mtimeMs: number }> = [];
     for (const d of dirs) {
-      const candidate = join(root, d);
-      if (existsSync(join(candidate, PLAN_TASK))) return candidate;
+      const task = join(root, d.name, PLAN_TASK);
+      if (!existsSync(task)) continue;
+      const st = await stat(task);
+      withMtime.push({ name: d.name, mtimeMs: st.mtimeMs });
     }
-    return null;
+    const newest = newestPlan(withMtime);
+    return newest ? join(root, newest) : null;
   }
 
   function resolveTarget(dir: string, name: string): string {

@@ -7,7 +7,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { checkPlan, parsePlan, planDirName, renderPlan, renderStatus, slugify } from "../server.ts";
+import { checkPlan, newestPlan, parsePlan, planDirName, renderPlan, renderStatus, slugify } from "../server.ts";
 
 const PLAN = `# Ship the parser
 
@@ -80,4 +80,14 @@ test("a real plan directory round-trips on disk", () => {
   const read = parsePlan(readFileSync(join(planDir, "task_plan.md"), "utf8"));
   assert.equal(read.phases.length, 3);
   assert.equal(existsSync(join(planDir, "task_plan.md")), true);
+});
+
+test("the active plan is the newest, not the alphabetically last", () => {
+  // "fourth" sorts before "third"; only mtime separates them.
+  const entries = [
+    { name: "2026-11-26-third-smoke-test", mtimeMs: 1000 },
+    { name: "2026-11-26-fourth-smoke-test", mtimeMs: 2000 },
+  ];
+  assert.equal(newestPlan(entries), "2026-11-26-fourth-smoke-test");
+  assert.equal(newestPlan([]), null);
 });
