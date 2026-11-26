@@ -184,8 +184,7 @@ export default async function plugin(bb: BbPluginApi) {
       if (!existsSync(join(dir, PLAN_PROGRESS))) {
         await writeFile(join(dir, PLAN_PROGRESS), `# Progress — ${goal}\n\n## ${now.toISOString().slice(0, 16).replace("T", " ")}\nPlan created with ${phases.length} phase(s).\n`, "utf8");
       }
-      const rel = dir.replace(base + "/", "");
-      return `plan created: ${rel}\n\n${renderPlan(goal, phases, now)}\nNext: work the first phase, then tick it in ${rel}/${PLAN_TASK} and append to ${PLAN_PROGRESS}.`;
+      return `plan created: ${dir}\n\n${renderPlan(goal, phases, now)}\nNext: work the first phase, then tick it in ${join(dir, PLAN_TASK)} and append to ${join(dir, PLAN_PROGRESS)}.`;
     },
   });
 
